@@ -8,7 +8,7 @@ import numpy as np
 
 # ---------------- ReID Model ----------------
 model = torchreid.models.build_model(
-    name='osnet_x1_0',
+    name='osnet_ain_x1_0',
     num_classes=1000,
     pretrained=True
 )
