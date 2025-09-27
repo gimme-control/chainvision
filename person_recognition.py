@@ -48,4 +48,3 @@ def get_person_id(person_clip):
         return len(people_database) - 1
     else:
         return best_match_id
-
