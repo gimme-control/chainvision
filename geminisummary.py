@@ -1,4 +1,4 @@
-from google import genai
+import google.generativeai as genai
 from PIL import Image
 import os
 
@@ -6,11 +6,6 @@ import os
 def generateSummary(image_list):
 
     genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-
-    images = []
-
-    for image in image_list:
-        images.append(Image.open(image))
 
     prompt = """
         I need you to give a description of the person depicted in the images I attached. 
@@ -42,10 +37,8 @@ def generateSummary(image_list):
         Be helpful and intelligent, make sure to use ALL of the images and if something is only in one image but not the other 4 STILL MENTION IT in the the decription, some things may only be visible in 1-2 images        
         """
 
-    content = [prompt] + images
+    model = genai.GenerativeModel('gemini-2.5-flash')
 
-    model = genai.GenerativeModel('gemini-pro-vision')
-
-    response = model.generate_content(content)
+    response = model.generate_content([prompt] + image_list)
 
     return response.text
