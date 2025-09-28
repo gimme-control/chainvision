@@ -88,6 +88,9 @@ if os.path.exists(json_file):
 else:
     saved_embeddings = {}
 
+attacker_id = -1
+confidence_counter = 0
+
 # Convert saved embeddings back to NumPy arrays
 saved_embeddings = {int(k): np.array(v) for k, v in saved_embeddings.items()}
 
@@ -142,6 +145,13 @@ while True:
             embedding = person_recognition.get_embedding(person_roi_resized)
             weapon_id = person_recognition.get_person_id(embedding)
 
+            if weapon_id == attacker_id and confidence_counter > 10:
+                #skip checking for guns if we already identified the hacker
+                wx1, wy1, wx2, wy2 = map(int, weapon_box)
+                cv2.rectangle(annotated_frame, (wx1, wy1), (wx2, wy2), (255, 0, 0), 2)
+                cv2.putText(annotated_frame, "Weapon", (wx1, wy1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+                continue
+
             # Log debug information
             logging.debug(f"Weapon ID: {weapon_id}, Weapon Boxes: {weapon_boxes}, Embedding: {embedding}")
 
@@ -151,6 +161,11 @@ while True:
                     tracked_embeddings.append(embedding)  # Save embedding only for weapon carrier
                     save_embeddings_to_json(embedding, weapon_id)  # Save to JSON
                     logging.debug(f"Weapon carrier locked: ID {weapon_id}")
+                    if attacker_id == weapon_id:
+                        confidence_counter += 1
+                    else:
+                        attacker_id = weapon_id
+                        confidence_counter = 0
                 cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
                 cv2.putText(annotated_frame, f"Weapon ID: {weapon_id}", (x1, y2 + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
             else:
