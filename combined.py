@@ -1,17 +1,12 @@
-import gunmatch
-from ultralytics import YOLO
-<<<<<<< HEAD
-=======
 import cv2
->>>>>>> parent of fbdc2c7 (big push incoming)
+import numpy as np
+from ultralytics import YOLO
 import mediapipe as mp
 import person_recognition
-import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
-import json  # Add this import at the top
+import json
 import os
 import logging
-<<<<<<< HEAD
 import requests
 
 # Configure logging
@@ -29,209 +24,278 @@ cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 300)
 if not cap.isOpened():
     print("Error: Could not open webcam")
     exit()
-=======
 
-person_model = YOLO("models/yolov8n.pt")
-gun_model = YOLO("models/best3.pt")
-
-# Configure logging
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
-
-# Initialize webcam
-cap = cv2.VideoCapture(0)
-cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)  
-cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)  
->>>>>>> parent of fbdc2c7 (big push incoming)
-
-# ------------------- MediaPipe Pose -------------------
-mp_pose = mp.solutions.pose
-pose = mp_pose.Pose(
-    static_image_mode=False,
-    model_complexity=1,
-    enable_segmentation=False,
-    min_detection_confidence=0.5,
-    min_tracking_confidence=0.5
-)
-mp_drawing = mp.solutions.drawing_utils
-
-# Function to compute angles
+# Function to compute angles (kept for completeness)
 def angle(a, b, c):
     a = np.array([a.x, a.y])
     b = np.array([b.x, b.y])
     c = np.array([c.x, c.y])
     ba = a - b
     bc = c - b
-    cos_angle = np.dot(ba, bc) / (np.linalg.norm(ba)*np.linalg.norm(bc)+1e-6)
+    cos_angle = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc) + 1e-6)
     return np.degrees(np.arccos(np.clip(cos_angle, -1, 1)))
 
+# --- NEW: Function to calculate IoU between two bounding boxes (xyxy format) ---
+def iou_xyxy(box1, box2):
+    """Calculate the Intersection over Union (IoU) of two bounding boxes in xyxy format."""
+    x1_inter = max(box1[0], box2[0])
+    y1_inter = max(box1[1], box2[1])
+    x2_inter = min(box1[2], box2[2])
+    y2_inter = min(box1[3], box2[3])
+
+    inter_area = max(0, x2_inter - x1_inter) * max(0, y2_inter - y1_inter)
+    
+    box1_area = (box1[2] - box1[0]) * (box1[3] - box1[1])
+    box2_area = (box2[2] - box2[0]) * (box2[3] - box2[1])
+
+    union_area = box1_area + box2_area - inter_area
+    
+    if union_area == 0:
+        return 0
+    return inter_area / union_area
+
+# --- Integrated People Detection (previously gunmatch.detect_people) ---
+def detect_people(frame, person_model, conf_threshold=0.2):
+    """Detects people in the frame using the YOLO model."""
+    results = person_model(frame, conf=conf_threshold, classes=[0])  # class 0 is 'person'
+    person_data = [] # Stores (box, embedding, pid)
+    if results[0].boxes is not None:
+        for box in results[0].boxes.xyxy:
+            person_box = box.cpu().numpy()
+            x1, y1, x2, y2 = map(int, person_box)
+            person_roi = frame[y1:y2, x1:x2]
+            
+            if person_roi.size == 0 or x2 <= x1 or y2 <= y1:
+                continue
+
+            person_roi_resized = cv2.resize(person_roi, (128, 256))
+            embedding = person_recognition.get_embedding(person_roi_resized)
+            
+            # Get general Person ID (from person_recognition internal DB)
+            pid = person_recognition.get_person_id(embedding)
+            
+            person_data.append({
+                'box': person_box,
+                'embedding': embedding,
+                'pid': pid,
+                'is_weapon_carrier': False,
+                'reid_locked_id': None
+            })
+    return person_data
+
+# --- Integrated Gun-to-Person Matching (previously gunmatch.match_people_to_guns) ---
+def match_people_to_guns(person_data, gun_boxes_xyxy, iou_threshold=0.01):
+    """Matches a gun box to the person box with the highest overlap (IoU)."""
+    # Create a list to store the matched person object for each gun
+    weapon_person_matches = [None] * len(gun_boxes_xyxy)
+    
+    for i, gun_box in enumerate(gun_boxes_xyxy):
+        max_iou = iou_threshold
+        best_match_person_data = None
+        
+        for person in person_data:
+            person_box = person['box']
+            current_iou = iou_xyxy(gun_box, person_box)
+            
+            # Check proximity (optional but good for filtering false matches)
+            wx, wy = (gun_box[0] + gun_box[2]) / 2, (gun_box[1] + gun_box[3]) / 2
+            px, py = (person_box[0] + person_box[2]) / 2, (person_box[1] + person_box[3]) / 2
+            distance = np.sqrt((px - wx) ** 2 + (py - wy) ** 2)
+            
+            if current_iou > max_iou and distance < 100: # Increased distance threshold slightly
+                max_iou = current_iou
+                best_match_person_data = person
+        
+        weapon_person_matches[i] = best_match_person_data
+
+    return weapon_person_matches
+
+
 # --- Persistent Weapon Carrier Tracking & ReID ---
-weapon_carrier_id = None
-tracked_embeddings = []  # Store embeddings only for weapon carriers
 json_file = "weapon_carrier_embeddings.json"  # File to store embeddings
+REID_SIMILARITY_THRESHOLD = 0.2 # INCREASED FOR ROBUSTNESS
 
-# Function to save embeddings to JSON and reload them
-def save_embeddings_to_json(embedding, weapon_carrier_id):
+# Server configuration
+SERVER_URL = "http://localhost:8000"
+
+# Replace load_saved_embeddings with API call
+def load_saved_embeddings():
     try:
-        # Load existing data
-        if os.path.exists(json_file):
-            with open(json_file, "r") as f:
-                if os.stat(json_file).st_size == 0:  # Check if file is empty
-                    data = {}
-                else:
-                    data = json.load(f)
-        else:
-            data = {}
-    except json.JSONDecodeError:
-        data = {}  # Handle invalid JSON
+        response = requests.get(f"{SERVER_URL}/dump")
+        response.raise_for_status()
+        data = response.json()
+        return {int(k): np.array(v) for k, v in data.items()}
+    except Exception as e:
+        logging.warning(f"Failed to load embeddings from server: {e}")
+        return {}
 
-    # Add new embedding
-    data[str(weapon_carrier_id)] = embedding.tolist()
+# --- Refined Embedding Management ---
+# Cache embeddings locally to avoid frequent HTTP calls
+saved_embeddings = load_saved_embeddings()
+cache_updated = False  # Flag to track if the cache needs updating
 
-    # Save back to file
-    with open(json_file, "w") as f:
-        json.dump(data, f)
+# Update the local cache of embeddings from the server.
+def update_local_embeddings(force_refresh=False):
+    """Update the local cache of embeddings from the server."""
+    global saved_embeddings, cache_updated
+    if force_refresh or cache_updated:
+        try:
+            new_embeddings = load_saved_embeddings()
+            saved_embeddings.update(new_embeddings)
+            cache_updated = False  # Reset the flag after updating
+            logging.info("Local embeddings cache updated.")
+        except Exception as e:
+            logging.warning(f"Failed to update local embeddings cache: {e}")
 
-    # Reload saved embeddings into memory
-    global saved_embeddings
-    saved_embeddings = {int(k): np.array(v) for k, v in data.items()}
+# --- Optimized Embedding Upload Management ---
+# Cache embeddings locally to avoid frequent uploads
+pending_embeddings = []  # List to store embeddings to be uploaded
+upload_interval = 30  # Number of frames between uploads
+frame_counter = 0  # Counter to track frames
 
-# --- Load Weapon Carrier Embeddings ---
-import os
-
-# Load saved weapon carrier embeddings from JSON
-if os.path.exists(json_file):
+def upload_pending_embeddings():
+    """Upload pending embeddings to the server."""
+    global pending_embeddings
+    if not pending_embeddings:
+        return
     try:
-        with open(json_file, "r") as f:
-            if os.stat(json_file).st_size == 0:  # Check if file is empty
-                saved_embeddings = {}
-            else:
-                saved_embeddings = json.load(f)
-    except json.JSONDecodeError:
-        saved_embeddings = {}  # Handle invalid JSON
-else:
-    saved_embeddings = {}
+        payload = {str(wid): embedding.tolist() for wid, embedding in pending_embeddings}
+        response = requests.post(f"{SERVER_URL}/append", json=payload)
+        response.raise_for_status()
+        logging.info(f"Uploaded {len(pending_embeddings)} embeddings to server.")
+        pending_embeddings.clear()  # Clear the pending list after successful upload
+    except Exception as e:
+        logging.warning(f"Failed to upload embeddings to server: {e}")
 
-# Convert saved embeddings back to NumPy arrays
-saved_embeddings = {int(k): np.array(v) for k, v in saved_embeddings.items()}
+# Modify save_embedding to add embeddings to the pending list
+def save_embedding(embedding, wid):
+    try:
+        pending_embeddings.append((wid, embedding))
+        logging.info(f"Queued embedding for ID {wid} for upload.")
+    except Exception as e:
+        logging.warning(f"Failed to queue embedding for upload: {e}")
+
+# Call upload_pending_embeddings periodically
+frame_counter += 1
+if frame_counter % upload_interval == 0:
+    upload_pending_embeddings()
+
+# Call update_local_embeddings only when necessary
+# Replace this line:
+# update_local_embeddings()
+# With:
+update_local_embeddings(force_refresh=False)
 
 while True:
     ret, frame = cap.read()
     if not ret:
+        logging.error("Failed to capture frame")
         break
 
-    # Detect guns and knives
-    gun_boxes = gunmatch.detect_guns(frame, gun_model, conf=0.8)  # stricter threshold
-    weapon_boxes = gun_boxes 
-
-    person_boxes = gunmatch.detect_people(frame, person_model)
-    weapon_person_boxes = gunmatch.match_people_to_guns(person_boxes, weapon_boxes)
     annotated_frame = frame.copy()
-    person_ids = []
 
-    # Assign IDs to all detected people
-    for person_box in person_boxes:
-        x1, y1, x2, y2 = map(int, person_box)
-        person_roi = frame[y1:y2, x1:x2]
-        if person_roi.size == 0:
-            continue
-        person_roi_resized = cv2.resize(person_roi, (128, 256))
-        embedding = person_recognition.get_embedding(person_roi_resized)
+    # --- 1. Detect Guns ---
+    gun_results = gun_model(frame, conf=0.35)
+    gun_boxes = [] # List of (xyxy, conf)
+    gun_boxes_xyxy = [] # List of xyxy numpy arrays
+    if gun_results[0].boxes is not None:
+        for box, cls, conf in zip(gun_results[0].boxes.xyxy, gun_results[0].boxes.cls, gun_results[0].boxes.conf):
+            if gun_model.names[int(cls)] == "guns":
+                box_np = box.cpu().numpy()
+                gun_boxes.append((box_np, conf))
+                gun_boxes_xyxy.append(box_np)
+                
+                wx1, wy1, wx2, wy2 = map(int, box_np)
+                cv2.rectangle(annotated_frame, (wx1, wy1), (wx2, wy2), (255, 0, 0), 2)
+                cv2.putText(
+                    annotated_frame,
+                    f"Gun ({conf:.2f})",
+                    (wx1, wy1 - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2
+                )
+    logging.debug(f"Gun detections: {len(gun_boxes)} boxes")
 
-        # Check against saved embeddings
-        weapon_locked = False
-        for saved_id, saved_embedding in saved_embeddings.items():
-            similarity = cosine_similarity([embedding], [saved_embedding])[0][0]
-            if similarity > 0.8:  # Threshold for re-identification
-                weapon_locked = True
-                cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
-                cv2.putText(annotated_frame, f"Weapon Locked: ID {saved_id}", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
-                break
+    # --- 2. Detect People and Calculate Embeddings (Unified Loop) ---
+    person_data = detect_people(frame, person_model, conf_threshold=0.4)
+    
+    # --- 3. Re-Identify All People Against Saved Weapon Carriers ---
+    for person in person_data:
+        x1, y1, x2, y2 = map(int, person['box'])
+        current_embedding = person['embedding']
+        
+        # Check against saved weapon carrier embeddings
+        best_match_id = None
+        max_similarity = 0
+        
+        for saved_id, embedding_list in saved_embeddings.items():
+            for saved_embedding in embedding_list:
+                similarity = cosine_similarity([current_embedding], [saved_embedding])[0][0]
+                if similarity > max_similarity:
+                    max_similarity = similarity
+                    best_match_id = saved_id
 
-        if not weapon_locked:
-            pid = person_recognition.get_person_id(embedding)
-            person_ids.append(pid)
+        # Determine lock status and draw boxes for ALL people
+        if best_match_id is not None and max_similarity > REID_SIMILARITY_THRESHOLD:
+            # Person is a previously known weapon carrier
+            person['reid_locked_id'] = best_match_id
+            cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
+            cv2.putText(
+                annotated_frame, 
+                f"Weapon Carrier: ID {best_match_id} ({max_similarity:.2f})", 
+                (x1, y1 - 10), 
+                cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2
+            )
+        else:
+            # Not a locked carrier (or similarity too low)
             cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            cv2.putText(annotated_frame, f"Person ID: {pid}", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            cv2.putText(
+                annotated_frame, 
+                f"Person ID: {person['pid']}", 
+                (x1, y1 - 10), 
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2
+            )
 
-    # Lock onto weapon carrier immediately when a weapon is detected
-    for weapon_box, weapon_person_box in zip(weapon_boxes, weapon_person_boxes):
-        if weapon_person_box is not None:
-            x1, y1, x2, y2 = map(int, weapon_person_box)
-            person_roi = frame[y1:y2, x1:x2]
-            if person_roi.size == 0:
-                logging.debug("Person ROI is empty. Skipping.")
-                continue
-            person_roi_resized = cv2.resize(person_roi, (128, 256))
-            embedding = person_recognition.get_embedding(person_roi_resized)
-            weapon_id = person_recognition.get_person_id(embedding)
 
-            # Log debug information
-            logging.debug(f"Weapon ID: {weapon_id}, Weapon Boxes: {weapon_boxes}, Embedding: {embedding}")
+    # --- 4. Lock onto New Weapon Carriers (Gun-Person Match) ---
+    weapon_person_matches = match_people_to_guns(person_data, gun_boxes_xyxy)
+    
+    for gun_index, weapon_person_match in enumerate(weapon_person_matches):
+        if weapon_person_match is not None:
+            # This person is currently holding a gun/is near a gun
+            weapon_person_match['is_weapon_carrier'] = True
+            
+            # Use the existing ID or the newly generated general ID
+            carrier_id = weapon_person_match['reid_locked_id'] 
+            
+            # If re-ID didn't lock on (it's a new weapon carrier)
+            if carrier_id is None:
+                carrier_id = weapon_person_match['pid'] # Use the general person ID
+                logging.debug(f"New potential weapon carrier detected. Assigning new ID: {carrier_id}")
+            
+            x1, y1, x2, y2 = map(int, weapon_person_match['box'])
+            current_embedding = weapon_person_match['embedding']
+            
+            # SAVE/UPDATE EMBEDDING (Enrollment)
+            # This function handles the logic of only saving if the embedding is significantly different
+            save_embedding(current_embedding, carrier_id)
+            
+            # Re-draw the box with the final, confirmed weapon carrier ID
+            cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 0, 255), 4) # Thicker red box
+            cv2.putText(
+                annotated_frame, 
+                f"WEAPON LOCKED ID: {carrier_id}", 
+                (x1, y2 + 25), 
+                cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 3
+            )
+        
+    # --- 5. Reload saved embeddings after potential saving
+    update_local_embeddings(force_refresh=False)
 
-            # Validate weapon carrier assignment
-            if weapon_id is not None and len(weapon_boxes) > 0:  # Ensure a valid weapon is detected
-                if not any(np.array_equal(embedding, tracked) for tracked in tracked_embeddings):
-                    tracked_embeddings.append(embedding)  # Save embedding only for weapon carrier
-                    save_embeddings_to_json(embedding, weapon_id)  # Save to JSON
-                    logging.debug(f"Weapon carrier locked: ID {weapon_id}")
-                cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
-                cv2.putText(annotated_frame, f"Weapon ID: {weapon_id}", (x1, y2 + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
-            else:
-                logging.debug("Weapon ID is None or no valid weapon detected.")
-        wx1, wy1, wx2, wy2 = map(int, weapon_box)
-        cv2.rectangle(annotated_frame, (wx1, wy1), (wx2, wy2), (255, 0, 0), 2)
-        cv2.putText(annotated_frame, "Weapon", (wx1, wy1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
-
-    cv2.imshow("Weapon Detection + ReID", annotated_frame)
+    # Display the frame
+    cv2.imshow("Weapon Detection + Robust ReID", annotated_frame)
     if cv2.waitKey(1) & 0xFF == ord("q"):
         break
+
+# Release resources
 cap.release()
 cv2.destroyAllWindows()
-
-# --- Original Person Detection & Pose Logic (commented out) ---
-# while True:
-#     ret, frame = cap.read()
-#     if not ret:
-#         break
-#     results = model(frame, device="cuda")
-#     annotated_frame = results[0].plot().copy()
-#     for box in results[0].boxes:
-#         x1, y1, x2, y2 = map(int, box.xyxy[0])
-#         h, w = frame.shape[:2]
-#         x1, y1 = max(0, x1), max(0, y1)
-#         x2, y2 = min(w, x2), min(h, y2)
-#         person_roi = frame[y1:y2, x1:x2]
-#         person_roi_resized = cv2.resize(person_roi, (128, 256))
-#         embedding = person_recognition.get_embedding(person_roi_resized)
-#         person_id = person_recognition.get_person_id(embedding)
-#         rgb_roi = cv2.cvtColor(person_roi, cv2.COLOR_BGR2RGB)
-#         pose_results = pose.process(rgb_roi)
-#         if pose_results.pose_landmarks:
-#             mp_drawing.draw_landmarks(
-#                 person_roi,
-#                 pose_results.pose_landmarks,
-#                 mp_pose.POSE_CONNECTIONS
-#             )
-#             landmarks = pose_results.pose_landmarks.landmark
-#             left_elbow_angle = angle(
-#                 landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER],
-#                 landmarks[mp_pose.PoseLandmark.LEFT_ELBOW],
-#                 landmarks[mp_pose.PoseLandmark.LEFT_WRIST]
-#             )
-#             cv2.putText(person_roi, f"LE:{int(left_elbow_angle)}", (5, 15),
-#                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-#             annotated_frame[y1:y2, x1:x2] = person_roi
-#             cv2.putText(
-#                 annotated_frame,
-#                 f"Person ID: {person_id}",
-#                 (x1, y1 - 10),
-#                 cv2.FONT_HERSHEY_SIMPLEX,
-#                 0.9,
-#                 (0, 255, 0),
-#                 2
-#             )
-#     cv2.imshow("YOLO + MediaPipe Pose", annotated_frame)
-#     if cv2.waitKey(1) & 0xFF == ord("q"):
-#         break
-# cap.release()
-# cv2.destroyAllWindows()
