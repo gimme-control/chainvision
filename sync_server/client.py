@@ -8,7 +8,7 @@ from typing import Any, Dict, Optional
 import os
 import requests
 
-DEFAULT_BASE = os.environ.get("KV_BASE", "http://127.0.0.1:8000")
+DEFAULT_BASE = os.environ.get("KV_BASE", "http://192.168.1.50:8000")
 TIMEOUT = 5  # seconds
 
 
