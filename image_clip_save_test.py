@@ -61,7 +61,7 @@ while frame_count > 0:
         x2, y2 = min(w, x2), min(h, y2)
         person_roi = frame[y1:y2, x1:x2]
 
-        image_utils.save_clipped(frame, (x1, y1, x2, y2), 0, frame_count)
+        image_utils.save_clipped_person(frame, (x1, y1, x2, y2), 0, frame_count)
         frame_count -= 1
         break
 
