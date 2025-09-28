@@ -20,7 +20,7 @@ gun_model = YOLO("models/best.pt")
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # --- Video ---
-cap = cv2.VideoCapture("warehouse.mp4")
+cap = cv2.VideoCapture(0)
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 600)  
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 350)  
 
@@ -135,7 +135,7 @@ while True:
                 
                 # Draw locked status (RED)
                 cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
-                cv2.putText(annotated_frame, f"Locked: ID 4", (x1, y1 - 10),
+                cv2.putText(annotated_frame, f"Locked: ID {current_person_id}", (x1, y1 - 10),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
                 # Take pictures if we haven't done it yet 5 times:
                 if picture_counter < 5:
@@ -182,7 +182,7 @@ while True:
 
             # Re-draw the carrier box in the primary carrier color (BRIGHT RED)
             cv2.rectangle(annotated_frame, (px1, py1), (px2, py2), (0, 0, 255), 4) # Thicker line
-            cv2.putText(annotated_frame, f"WEAPON CARRIER: ID 4", (px1, py1 - 10),
+            cv2.putText(annotated_frame, f"WEAPON CARRIER: ID {current_person_id}", (px1, py1 - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 3)
 
 
