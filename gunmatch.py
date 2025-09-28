@@ -49,11 +49,11 @@ def detect_people(frame, person_model, conf=0.20, imgsz=640):
     return xyxy[cls == 0].tolist()
 
 # ---------- matching ----------
-def match_people_to_guns(person_boxes, gun_boxes):
+def match_people_to_guns(person_boxes, gun_boxes, iou_threshold=0.3, proximity_threshold=150):
     """
     For each gun box, choose the person with:
-      - max IoU if any overlap, else
-      - smallest center distance.
+      - max IoU if any overlap above `iou_threshold`, else
+      - smallest center distance within `proximity_threshold`.
     Returns list of person boxes (or None), one per gun (same order as gun_boxes).
     """
     if not gun_boxes:
@@ -65,14 +65,17 @@ def match_people_to_guns(person_boxes, gun_boxes):
     matched = []
     for g in gun_boxes:
         ious = np.array([iou_xyxy(g, p) for p in person_boxes])
-        if (ious > 0).any():
+        if (ious > iou_threshold).any():
             j = int(np.argmax(ious))
             matched.append(person_boxes[j])
         else:
             g_center = _center_xyxy(g)
             dists = np.linalg.norm(p_centers - g_center, axis=1)
-            j = int(np.argmin(dists))
-            matched.append(person_boxes[j])
+            if (dists < proximity_threshold).any():
+                j = int(np.argmin(dists))
+                matched.append(person_boxes[j])
+            else:
+                matched.append(None)
     return matched
 
 #jjjjjj
