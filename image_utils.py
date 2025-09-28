@@ -3,8 +3,8 @@ import os
 import cv2
 
 
-def save_clipped(image, bbox, save_path, person_id, frame_index):
-    save_path = "/suspect_images/"
+def save_clipped(image, bbox, person_id, frame_index):
+    save_path = "suspect_images/"
     """
     Clips and saves a bounding box region from the image.
 
@@ -28,6 +28,7 @@ def save_clipped(image, bbox, save_path, person_id, frame_index):
 
     # filename with id + frame
     filename = os.path.join(save_path, f"person_{person_id}-{frame_index}.jpg")
+    print(f"Saved file at {filename}")
     cv2.imwrite(filename, cropped)
 
     return filename
