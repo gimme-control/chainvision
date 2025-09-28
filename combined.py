@@ -1,7 +1,7 @@
 import gunmatch
 from ultralytics import YOLO
 import cv2
-# import image_utils
+import image_utils
 import person_recognition
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
