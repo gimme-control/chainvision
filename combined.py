@@ -141,7 +141,7 @@ while True:
                     image_utils.save_clipped_person(frame, (x1, y1, x2, y2), saved_id, picture_counter)
                     picture_counter += 1
                 if picture_counter == 5:
-                    image_utils.generate_summary(image_utils.list)
+                    image_utils.generate_summary(image_utils.image_list)
                     picture_counter += 1
                 break
     
