@@ -76,7 +76,7 @@ def generate_summary(image_list):
     model = genai.GenerativeModel('gemini-2.5-flash')
 
     response = model.generate_content([prompt] + image_list)
-    make_pdf(response, image_list)
+    make_pdf(response.text, image_list)
     print(response.text)
 
 
