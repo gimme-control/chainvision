@@ -8,8 +8,7 @@ import google.generativeai as genai
 from dotenv import load_dotenv
 import os
 
-load_dotenv()  # this loads variables from your .env file into os.environ
-
+load_dotenv()
 
 image_list = []
 
@@ -77,5 +76,61 @@ def generate_summary(image_list):
     model = genai.GenerativeModel('gemini-2.5-flash')
 
     response = model.generate_content([prompt] + image_list)
-
+    make_pdf(response, image_list)
     print(response.text)
+
+
+def make_pdf(report_text, image_list, out_path="report.pdf", title="Suspect Description"):
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RLImage
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.units import inch
+    from datetime import datetime
+    from io import BytesIO
+
+    # --- PDF doc setup ---
+    doc = SimpleDocTemplate(
+        out_path,
+        pagesize=letter,
+        leftMargin=0.75*inch,
+        rightMargin=0.75*inch,
+        topMargin=0.75*inch,
+        bottomMargin=0.75*inch,
+    )
+    styles = getSampleStyleSheet()
+    story = []
+
+    # --- Header ---
+    story.append(Paragraph(title, styles["Title"]))
+    story.append(Paragraph(datetime.now().strftime("Generated: %Y-%m-%d %H:%M:%S"), styles["Normal"]))
+    story.append(Spacer(1, 0.25*inch))
+
+    # --- Body text (preserve newlines) ---
+    safe_text = (report_text or "").replace("\n", "<br/>")
+    story.append(Paragraph(safe_text, styles["BodyText"]))
+    story.append(Spacer(1, 0.25*inch))
+
+    # --- Images (all PIL) ---
+    max_w, max_h = 6.0*inch, 8.0*inch  # keeps images inside page area
+    for pil_img in (image_list or []):
+        # Ensure RGB and compress to JPEG in-memory
+        pil = pil_img.convert("RGB") if pil_img.mode not in ("RGB", "L") else pil_img
+        buf = BytesIO()
+        pil.save(buf, format="JPEG", quality=85, optimize=True)  # tweak quality as desired
+        buf.seek(0)
+
+        rl_img = RLImage(buf)
+        iw, ih = rl_img.wrap(0, 0)
+        if iw == 0 or ih == 0:
+            continue
+
+        scale = min(max_w / iw, max_h / ih, 1.0)
+        rl_img._restrictSize(iw * scale, ih * scale)
+
+        story.append(rl_img)
+        story.append(Spacer(1, 0.2*inch))
+
+    doc.build(story)
+    return out_path
+
+
