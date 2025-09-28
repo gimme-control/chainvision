@@ -30,7 +30,7 @@ def save_clipped_person(image, bbox, person_id, frame_index):
     cropped_rgb = cv2.cvtColor(cropped, cv2.COLOR_BGR2RGB)
     pil_img = Image.fromarray(cropped_rgb)
 
-    image_list.append((person_id, frame_index, pil_img))
+    image_list.append(pil_img)
     generate_summary(image_list)
 
 
