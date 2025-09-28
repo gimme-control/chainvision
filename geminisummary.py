@@ -3,7 +3,7 @@ from PIL import Image
 import os
 
 #needs a list of strings and the strings are image names like image.jpg
-def generateSummary(image_list):
+def generate_summary(image_list):
 
     genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
