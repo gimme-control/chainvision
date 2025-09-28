@@ -37,7 +37,6 @@ def save_clipped_person(image, bbox, person_id, frame_index):
     pil_img = Image.fromarray(cropped_rgb)
 
     image_list.append(pil_img)
-    generate_summary(image_list)
 
 
 #needs a list of strings and the strings are image names like image.jpg

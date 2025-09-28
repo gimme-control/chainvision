@@ -141,8 +141,11 @@ while True:
                 if picture_counter < 5:
                     # image_utils.save_clipped_person(frame, (x1, y1, x2, y2), saved_id, picture_counter)
                     picture_counter += 1
+                if picture_counter == 5:
+                    image_utils.generate_summary(image_utils.list)
+                    picture_counter += 1
                 break
-
+    
         # If not locked, treat as a new or tracked person (GREEN)
         if not weapon_locked:
             # Use ReID to get a temporary ID for tracking
