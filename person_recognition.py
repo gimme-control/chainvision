@@ -37,13 +37,13 @@ def get_person_id(person_clip):
     best_match_id = -1
     for i in range(len(people_database)):
         match_value = cosine_similarity(people_database[i].reshape(1, -1), person_clip.reshape(1, -1))
-        if match_value > 0.75:
+        if match_value > 0.8:
             found_person = True
             if match_value > best_match:
                 best_match = match_value
                 best_match_id = i
     # if we don't find it we add it
-    if not found_person:
+    if not found_person and best_match < 0.5:
         people_database.append(person_clip)
         return len(people_database) - 1
     else:
