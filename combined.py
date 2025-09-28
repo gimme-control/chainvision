@@ -139,7 +139,7 @@ while True:
                             cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
                 # Take pictures if we haven't done it yet 5 times:
                 if picture_counter < 5:
-                    # image_utils.save_clipped_person(frame, (x1, y1, x2, y2), saved_id, picture_counter)
+                    image_utils.save_clipped_person(frame, (x1, y1, x2, y2), saved_id, picture_counter)
                     picture_counter += 1
                 if picture_counter == 5:
                     image_utils.generate_summary(image_utils.image_list)
