@@ -6,7 +6,7 @@ import mediapipe as mp
 import person_recognition
 
 # ------------------- YOLO -------------------
-model = YOLO("yolov8n.pt")
+model = YOLO("models/yolov8n.pt")
 
 # Initialize webcam
 cap = cv2.VideoCapture(0)
@@ -40,7 +40,7 @@ while True:
         break
 
     # YOLO detection
-    results = model(frame, device="cpu")
+    results = model(frame, device="cuda")
     annotated_frame = results[0].plot().copy()
 
     # Process each detected person
