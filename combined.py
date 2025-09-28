@@ -9,6 +9,7 @@ import os
 import logging
 
 # --- Models ---
+# Assuming these models are accessible in your environment
 person_model = YOLO("models/yolov8n.pt")
 gun_model = YOLO("models/best3.pt")
 
@@ -22,7 +23,7 @@ cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
 # --- Persistent Weapon Carrier ---
 json_file = "weapon_carrier_embeddings.json"
-tracked_embeddings = []  # embeddings for persistent carriers
+tracked_embeddings = []  # IDs for persistent carriers
 saved_embeddings = {}
 
 # Load saved embeddings from JSON
@@ -30,33 +31,36 @@ if os.path.exists(json_file):
     try:
         with open(json_file, "r") as f:
             if os.stat(json_file).st_size > 0:
+                # Load JSON and convert list back to NumPy array
                 saved_embeddings = {int(k): np.array(v) for k, v in json.load(f).items()}
             else:
                 saved_embeddings = {}
     except json.JSONDecodeError:
+        logging.warning(f"Could not decode JSON from {json_file}. Starting with empty embeddings.")
         saved_embeddings = {}
 
 attacker_id = None
 confidence_counter = 0
 
 def save_embeddings_to_json(embedding, weapon_carrier_id):
+    """Saves a new weapon carrier's embedding to the persistent JSON file."""
     global saved_embeddings
-    # Store the embedding in memory as a NumPy array (optional)
+    # Store the embedding in memory
     saved_embeddings[weapon_carrier_id] = embedding
 
     # Prepare dictionary for JSON: convert all embeddings to lists
-    json_safe_dict = {k: v.tolist() if isinstance(v, np.ndarray) else v
+    json_safe_dict = {str(k): v.tolist() if isinstance(v, np.ndarray) else v
                       for k, v in saved_embeddings.items()}
 
     # Save to file
     with open(json_file, "w") as f:
-        json.dump(json_safe_dict, f)
+        json.dump(json_safe_dict, f, indent=4)
 
 
 # --- Thresholds ---
-GUN_CONF_THRESHOLD = 0.45
+GUN_CONF_THRESHOLD = 0.25
 PERSON_CONF_THRESHOLD = 0.4
-REID_SIMILARITY_THRESHOLD = 0.6
+REID_SIMILARITY_THRESHOLD = 0.5
 IOU_THRESHOLD = 0.2
 PROXIMITY_THRESHOLD = 150  # pixels
 
@@ -64,19 +68,31 @@ PROXIMITY_THRESHOLD = 150  # pixels
 frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
 frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-# --- Define codec and create VideoWriter object (once, before loop) ---
+# --- Define codec and create VideoWriter object (Crucial Fix Applied Here) ---
+# FIX: Switched to XVID codec and .avi extension for robust writing across platforms.
 out = cv2.VideoWriter(
-    "output.mp4",                 # output file name
-    cv2.VideoWriter_fourcc(*"mp4v"),  # codec for MP4
+    "output_annotated.avi",         # Changed to .avi
+    cv2.VideoWriter_fourcc(*"XVID"),  # Changed codec to XVID
     30,                            # frames per second
     (frame_width, frame_height)    # frame size
 )
+
+# Check if VideoWriter was initialized successfully
+if not out.isOpened():
+    logging.error("VideoWriter failed to open. Try a different codec (e.g., 'MJPG', 'DIVX', 'mp4v') or ensure FFmpeg/codec packages are installed.")
+    cap.release()
+    cv2.destroyAllWindows()
+    # Exit gracefully if we can't write the video
+    exit()
+
+logging.info(f"VideoWriter initialized for output_annotated.avi with dimensions: {frame_width}x{frame_height}")
 
 
 # --- Main Loop ---
 while True:
     ret, frame = cap.read()
     if not ret:
+        logging.info("End of video stream.")
         break
 
     annotated_frame = frame.copy()
@@ -90,58 +106,77 @@ while True:
                                                         iou_threshold=IOU_THRESHOLD,
                                                         proximity_threshold=PROXIMITY_THRESHOLD)
 
-    # --- Track each person ---
+    # --- Track each person and check against persistent carriers ---
     for person_box in person_boxes:
         x1, y1, x2, y2 = map(int, person_box)
         person_roi = frame[y1:y2, x1:x2]
         if person_roi.size == 0:
             continue
+        
+        # Ensure ROI is valid for person_recognition.get_embedding (128x256)
+        if person_roi.shape[0] < 2 or person_roi.shape[1] < 2:
+            continue
+            
         person_roi_resized = cv2.resize(person_roi, (128, 256))
         embedding = person_recognition.get_embedding(person_roi_resized)
 
         # Check if this person matches a previously saved weapon carrier
         weapon_locked = False
+        current_person_id = None
+        
+        # Check against saved embeddings
         for saved_id, saved_embedding in saved_embeddings.items():
             similarity = cosine_similarity([embedding], [saved_embedding])[0][0]
             if similarity > REID_SIMILARITY_THRESHOLD:
                 weapon_locked = True
+                current_person_id = saved_id
+                
+                # Draw locked status (RED)
                 cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
-                cv2.putText(annotated_frame, f"Weapon Locked: ID {saved_id}", (x1, y1 - 10),
+                cv2.putText(annotated_frame, f"Locked: ID {current_person_id}", (x1, y1 - 10),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
                 break
 
+        # If not locked, treat as a new or tracked person (GREEN)
         if not weapon_locked:
-            pid = person_recognition.get_person_id(embedding)
+            # Use ReID to get a temporary ID for tracking
+            current_person_id = person_recognition.get_person_id(embedding) 
             cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            cv2.putText(annotated_frame, f"Person ID: {pid}", (x1, y1 - 10),
+            cv2.putText(annotated_frame, f"Person ID: {current_person_id}", (x1, y1 - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
 
-    # --- Lock onto weapon carriers ---
-    if len(gun_boxes) > 0:
-        for gun_box, matched_person_box in zip(gun_boxes, weapon_person_boxes):
-            # Draw gun
-            gx1, gy1, gx2, gy2 = map(int, gun_box)
-            cv2.rectangle(annotated_frame, (gx1, gy1), (gx2, gy2), (255, 0, 0), 2)
-            cv2.putText(annotated_frame, "Weapon", (gx1, gy1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
 
-            # If gun is matched to a person, lock onto them
-            if matched_person_box is not None:
-                px1, py1, px2, py2 = map(int, matched_person_box)
-                person_roi = frame[py1:py2, px1:px2]
-                if person_roi.size == 0:
-                    continue
-                person_roi_resized = cv2.resize(person_roi, (128, 256))
-                embedding = person_recognition.get_embedding(person_roi_resized)
-                weapon_id = person_recognition.get_person_id(embedding)
+    # --- Lock onto weapon carriers (Primary Detection) ---
+    for gun_box, matched_person_box in zip(gun_boxes, weapon_person_boxes):
+        # Draw gun (BLUE)
+        gx1, gy1, gx2, gy2 = map(int, gun_box)
+        cv2.rectangle(annotated_frame, (gx1, gy1), (gx2, gy2), (255, 0, 0), 2)
+        cv2.putText(annotated_frame, "Weapon", (gx1, gy1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
 
-                # Persist weapon carrier
-                if weapon_id not in tracked_embeddings:
-                    tracked_embeddings.append(weapon_id)
-                    save_embeddings_to_json(embedding, weapon_id)
+        # If gun is matched to a person, confirm them as a carrier
+        if matched_person_box is not None:
+            px1, py1, px2, py2 = map(int, matched_person_box)
+            person_roi = frame[py1:py2, px1:px2]
+            if person_roi.size == 0:
+                continue
+            
+            # Ensure ROI is valid
+            if person_roi.shape[0] < 2 or person_roi.shape[1] < 2:
+                continue
 
-                cv2.rectangle(annotated_frame, (px1, py1), (px2, py2), (0, 0, 255), 2)
-                cv2.putText(annotated_frame, f"Weapon Carrier: ID {weapon_id}", (px1, py1 - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
+            person_roi_resized = cv2.resize(person_roi, (128, 256))
+            embedding = person_recognition.get_embedding(person_roi_resized)
+            weapon_id = person_recognition.get_person_id(embedding)
+
+            # Persist weapon carrier if new
+            if weapon_id not in tracked_embeddings:
+                tracked_embeddings.append(weapon_id)
+                save_embeddings_to_json(embedding, weapon_id)
+
+            # Re-draw the carrier box in the primary carrier color (BRIGHT RED)
+            cv2.rectangle(annotated_frame, (px1, py1), (px2, py2), (0, 0, 255), 4) # Thicker line
+            cv2.putText(annotated_frame, f"WEAPON CARRIER: ID {weapon_id}", (px1, py1 - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 3)
 
 
     out.write(annotated_frame)
@@ -149,6 +184,8 @@ while True:
     if cv2.waitKey(1) & 0xFF == ord("q"):
         break
 
+# --- Cleanup ---
 cap.release()
 out.release()
 cv2.destroyAllWindows()
+logging.info("Video processing finished and resources released.")
