@@ -11,7 +11,6 @@ import logging
 
 person_model = YOLO("models/yolov8n.pt")
 gun_model = YOLO("models/best3.pt")
-knife_model = YOLO("models/knife_detection.pt")  # Replace with the best knife detection model
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -99,8 +98,7 @@ while True:
 
     # Detect guns and knives
     gun_boxes = gunmatch.detect_guns(frame, gun_model, conf=0.8)  # stricter threshold
-    knife_boxes = gunmatch.detect_knives(frame, knife_model, conf=0.8)  # stricter threshold
-    weapon_boxes = gun_boxes + knife_boxes  # Combine detections
+    weapon_boxes = gun_boxes 
 
     person_boxes = gunmatch.detect_people(frame, person_model)
     weapon_person_boxes = gunmatch.match_people_to_guns(person_boxes, weapon_boxes)
