@@ -1,3 +1,4 @@
 venv
 linux-env
 __pycache__
+.env
