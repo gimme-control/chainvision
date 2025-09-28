@@ -140,7 +140,6 @@ while True:
                                                          iou_threshold=IOU_THRESHOLD,
                                                          proximity_threshold=PROXIMITY_THRESHOLD)
 
-    # --- Track each person and check against persistent carriers ---
     for person_box in person_boxes:
         x1, y1, x2, y2 = map(int, person_box)
         person_roi = frame[y1:y2, x1:x2]
@@ -150,38 +149,48 @@ while True:
         person_roi_resized = cv2.resize(person_roi, (128, 256))
         embedding = person_recognition.get_embedding(person_roi_resized)
 
-        # Check if this person matches a previously saved weapon carrier
-        weapon_locked = False
-        current_person_id = None
+        # --- RE-IDENTIFICATION & TRACKING LOGIC ---
+        
+        is_known_weapon_carrier = False
+        current_person_id = person_recognition.get_person_id(embedding) # Get temporary/session ID first
 
-        # Check against the in-memory saved embeddings (loaded from server at start)
+        # Check against the PERSISTENT (server-loaded) saved embeddings
+        # We look for the best match against anyone ever saved.
+        best_similarity = 0.0
+        matched_saved_id = None
+        
         for saved_id, saved_embedding in saved_embeddings.items():
             similarity = cosine_similarity([embedding], [saved_embedding])[0][0]
-            if similarity > REID_SIMILARITY_THRESHOLD:
-                weapon_locked = True
-                current_person_id = saved_id
+            if similarity > REID_SIMILARITY_THRESHOLD and similarity > best_similarity:
+                best_similarity = similarity
+                matched_saved_id = saved_id
 
-                # Draw locked status (RED)
-                cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
-                cv2.putText(annotated_frame, f"Locked: ID 7", (x1, y1 - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
-                
-                # Take pictures if we haven't done it yet 5 times:
-                if picture_counter < 5:
-                    image_utils.save_clipped_person(frame, (x1, y1, x2, y2), saved_id, picture_counter)
-                    picture_counter += 1
-                break
+        # If a match is found to a persistent carrier (even without a weapon present)
+        if matched_saved_id is not None:
+            is_known_weapon_carrier = True
+            final_id = matched_saved_id # Use the persistent ID
+            
+            # 1. ALWAYS DRAW RED BOX FOR TRACKING KNOWN CARRIERS
+            cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
+            cv2.putText(annotated_frame, f"Tracking Carrier: ID {final_id}", (x1, y1 - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
+            
+            # 2. Picture logic (Kept separate from drawing)
+            # You may want to refine this to track per-ID, but using the global counter for now:
+            if picture_counter < 5:
+                # Ensure you save pictures using the persistent ID
+                image_utils.save_clipped_person(frame, (x1, y1, x2, y2), final_id, picture_counter)
+                picture_counter += 1
 
-        # If not locked, treat as a new or tracked person (GREEN)
-        if not weapon_locked:
-            # Use ReID to get a temporary ID for tracking
-            current_person_id = person_recognition.get_person_id(embedding)
+        else:
+            # If not a known persistent carrier, track with the session ID (green box)
+            final_id = current_person_id
             cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            cv2.putText(annotated_frame, f"Person ID: {current_person_id}", (x1, y1 - 10),
+            cv2.putText(annotated_frame, f"Person ID: {final_id}", (x1, y1 - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
 
 
-    # --- Lock onto weapon carriers (Primary Detection) ---
+    # --- Lock onto weapon carriers (Primary Detection & Persistence) ---
     for gun_box, matched_person_box in zip(gun_boxes, weapon_person_boxes):
         # Draw gun (BLUE)
         gx1, gy1, gx2, gy2 = map(int, gun_box)
@@ -197,15 +206,18 @@ while True:
 
             person_roi_resized = cv2.resize(person_roi, (128, 256))
             embedding = person_recognition.get_embedding(person_roi_resized)
-            weapon_id = person_recognition.get_person_id(embedding)
+            
+            # *** USE THE EMBEDDING TO GET/CREATE THE ID FOR THIS NEW CARRIER ***
+            weapon_id = person_recognition.get_person_id(embedding) 
 
             # Persist weapon carrier if new
             if weapon_id not in saved_embeddings:
-                # *** THIS IS THE REPLACEMENT FOR save_embeddings_to_json ***
+                # This adds the new embedding to the in-memory cache and triggers server upload
                 cache_and_maybe_upload(embedding, weapon_id)
 
-            # Re-draw the carrier box in the primary carrier color (BRIGHT RED)
-            cv2.rectangle(annotated_frame, (px1, py1), (px2, py2), (0, 0, 255), 4) # Thicker line
+            # Re-draw the carrier box in the PRIMARY CARRIER color (BRIGHT RED, Thicker line)
+            # This overrides the initial tracking draw to signal the active threat
+            cv2.rectangle(annotated_frame, (px1, py1), (px2, py2), (0, 0, 255), 4) 
             cv2.putText(annotated_frame, f"WEAPON CARRIER: ID {weapon_id}", (px1, py1 - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 3)
 
