@@ -11,6 +11,7 @@ import logging
 
 person_model = YOLO("models/yolov8n.pt")
 gun_model = YOLO("models/best3.pt")
+knife_model = YOLO("models/knife_detection.pt")  # Replace with the best knife detection model
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -41,13 +42,13 @@ def angle(a, b, c):
     cos_angle = np.dot(ba, bc) / (np.linalg.norm(ba)*np.linalg.norm(bc)+1e-6)
     return np.degrees(np.arccos(np.clip(cos_angle, -1, 1)))
 
-# --- Persistent Gunman Tracking & ReID ---
-gunman_id = None
-tracked_embeddings = []  # Store embeddings only for gunmen
-json_file = "gunman_embeddings.json"  # File to store embeddings
+# --- Persistent Weapon Carrier Tracking & ReID ---
+weapon_carrier_id = None
+tracked_embeddings = []  # Store embeddings only for weapon carriers
+json_file = "weapon_carrier_embeddings.json"  # File to store embeddings
 
 # Function to save embeddings to JSON and reload them
-def save_embeddings_to_json(embedding, gunman_id):
+def save_embeddings_to_json(embedding, weapon_carrier_id):
     try:
         # Load existing data
         if os.path.exists(json_file):
@@ -62,7 +63,7 @@ def save_embeddings_to_json(embedding, gunman_id):
         data = {}  # Handle invalid JSON
 
     # Add new embedding
-    data[str(gunman_id)] = embedding.tolist()
+    data[str(weapon_carrier_id)] = embedding.tolist()
 
     # Save back to file
     with open(json_file, "w") as f:
@@ -72,10 +73,10 @@ def save_embeddings_to_json(embedding, gunman_id):
     global saved_embeddings
     saved_embeddings = {int(k): np.array(v) for k, v in data.items()}
 
-# --- Load Gunman Embeddings ---
+# --- Load Weapon Carrier Embeddings ---
 import os
 
-# Load saved gunman embeddings from JSON
+# Load saved weapon carrier embeddings from JSON
 if os.path.exists(json_file):
     try:
         with open(json_file, "r") as f:
@@ -95,9 +96,14 @@ while True:
     ret, frame = cap.read()
     if not ret:
         break
-    gun_boxes = gunmatch.detect_guns(frame, gun_model, conf=0.6)  # stricter threshold
+
+    # Detect guns and knives
+    gun_boxes = gunmatch.detect_guns(frame, gun_model, conf=0.8)  # stricter threshold
+    knife_boxes = gunmatch.detect_knives(frame, knife_model, conf=0.8)  # stricter threshold
+    weapon_boxes = gun_boxes + knife_boxes  # Combine detections
+
     person_boxes = gunmatch.detect_people(frame, person_model)
-    gunman_boxes = gunmatch.match_people_to_guns(person_boxes, gun_boxes)
+    weapon_person_boxes = gunmatch.match_people_to_guns(person_boxes, weapon_boxes)
     annotated_frame = frame.copy()
     person_ids = []
 
@@ -111,51 +117,51 @@ while True:
         embedding = person_recognition.get_embedding(person_roi_resized)
 
         # Check against saved embeddings
-        gunman_locked = False
+        weapon_locked = False
         for saved_id, saved_embedding in saved_embeddings.items():
             similarity = cosine_similarity([embedding], [saved_embedding])[0][0]
             if similarity > 0.8:  # Threshold for re-identification
-                gunman_locked = True
+                weapon_locked = True
                 cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
-                cv2.putText(annotated_frame, f"Gunman Locked: ID {saved_id}", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
+                cv2.putText(annotated_frame, f"Weapon Locked: ID {saved_id}", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
                 break
 
-        if not gunman_locked:
+        if not weapon_locked:
             pid = person_recognition.get_person_id(embedding)
             person_ids.append(pid)
             cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
             cv2.putText(annotated_frame, f"Person ID: {pid}", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
 
-    # Lock onto gunman immediately when gun is detected
-    for gun_box, gunman_box in zip(gun_boxes, gunman_boxes):
-        if gunman_box is not None:
-            x1, y1, x2, y2 = map(int, gunman_box)
+    # Lock onto weapon carrier immediately when a weapon is detected
+    for weapon_box, weapon_person_box in zip(weapon_boxes, weapon_person_boxes):
+        if weapon_person_box is not None:
+            x1, y1, x2, y2 = map(int, weapon_person_box)
             person_roi = frame[y1:y2, x1:x2]
             if person_roi.size == 0:
                 logging.debug("Person ROI is empty. Skipping.")
                 continue
             person_roi_resized = cv2.resize(person_roi, (128, 256))
             embedding = person_recognition.get_embedding(person_roi_resized)
-            gunman_id = person_recognition.get_person_id(embedding)
+            weapon_id = person_recognition.get_person_id(embedding)
 
             # Log debug information
-            logging.debug(f"Gunman ID: {gunman_id}, Gun Boxes: {gun_boxes}, Embedding: {embedding}")
+            logging.debug(f"Weapon ID: {weapon_id}, Weapon Boxes: {weapon_boxes}, Embedding: {embedding}")
 
-            # Validate gunman assignment
-            if gunman_id is not None and len(gun_boxes) > 0:  # Ensure a valid gun is detected
+            # Validate weapon carrier assignment
+            if weapon_id is not None and len(weapon_boxes) > 0:  # Ensure a valid weapon is detected
                 if not any(np.array_equal(embedding, tracked) for tracked in tracked_embeddings):
-                    tracked_embeddings.append(embedding)  # Save embedding only for gunman
-                    save_embeddings_to_json(embedding, gunman_id)  # Save to JSON
-                    logging.debug(f"Gunman locked: ID {gunman_id}")
+                    tracked_embeddings.append(embedding)  # Save embedding only for weapon carrier
+                    save_embeddings_to_json(embedding, weapon_id)  # Save to JSON
+                    logging.debug(f"Weapon carrier locked: ID {weapon_id}")
                 cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
-                cv2.putText(annotated_frame, f"Gunman ID: {gunman_id}", (x1, y2 + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
+                cv2.putText(annotated_frame, f"Weapon ID: {weapon_id}", (x1, y2 + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
             else:
-                logging.debug("Gunman ID is None or no valid gun detected.")
-        gx1, gy1, gx2, gy2 = map(int, gun_box)
-        cv2.rectangle(annotated_frame, (gx1, gy1), (gx2, gy2), (255, 0, 0), 2)
-        cv2.putText(annotated_frame, "Gun", (gx1, gy1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+                logging.debug("Weapon ID is None or no valid weapon detected.")
+        wx1, wy1, wx2, wy2 = map(int, weapon_box)
+        cv2.rectangle(annotated_frame, (wx1, wy1), (wx2, wy2), (255, 0, 0), 2)
+        cv2.putText(annotated_frame, "Weapon", (wx1, wy1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
 
-    cv2.imshow("Gun & Gunman Detection + ReID", annotated_frame)
+    cv2.imshow("Weapon Detection + ReID", annotated_frame)
     if cv2.waitKey(1) & 0xFF == ord("q"):
         break
 cap.release()
