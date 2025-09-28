@@ -19,11 +19,10 @@ def generate_summary(image_list):
         Hair Color: Figure out the hair color ex. Blonde
         Hair Style: Figure out the hair style ex. Short and Spiky
         Eye Color: Figure out eye color ex. Hazel
-        Nose Shape: Long or Wide or Flat or Average ex. Long
         Facial Hair: Does the person have a beard or mustache or clean ex. Beard and Mustache
         Tatoos: Does the person have any tatoos ex. Large tatoo on the right thigh
         Hat/Coverings: Is the person wearing a hat or facial covering ex. Blue Baseball Cap and a Black Ski Mask
-        Coat: Is the person wearing a coat or jacket ex. Grey Winter Coat
+        Cover Up: Is the person wearing a coat or jacket  or sweatshirt ex. Grey Jacket
         Shirt: Describe the persons shirt ex. Light Blue Shirt
         Shoes: Describe the persons shoes ex. Black Boots
         Accessories: Describe any accessories ex. Blue Scarf and a Black Gloves
