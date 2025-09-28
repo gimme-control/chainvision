@@ -1,7 +1,9 @@
 import cv2
 import numpy as np
 from ultralytics import YOLO
-import person_recognition
+from src.detection import person_recognition
+from src.detection import gun_detection
+from src.utils import image_utils
 from sklearn.metrics.pairwise import cosine_similarity
 import json
 import os
