@@ -1,7 +1,7 @@
 import gunmatch
 from ultralytics import YOLO
 import cv2
-import image_utils
+# import image_utils
 import person_recognition
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
@@ -14,15 +14,15 @@ picture_counter = 0
 # --- Models ---
 # Assuming these models are accessible in your environment
 person_model = YOLO("models/yolov8n.pt")
-gun_model = YOLO("models/best3.pt")
+gun_model = YOLO("models/best.pt")
 
 # --- Logging ---
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # --- Video ---
-cap = cv2.VideoCapture("grocery.mp4")
-cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)  
-cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)  
+cap = cv2.VideoCapture("warehouse.mp4")
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, 600)  
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 350)  
 
 # --- Persistent Weapon Carrier ---
 json_file = "weapon_carrier_embeddings.json"
@@ -61,10 +61,10 @@ def save_embeddings_to_json(embedding, weapon_carrier_id):
 
 
 # --- Thresholds ---
-GUN_CONF_THRESHOLD = 0.30
-PERSON_CONF_THRESHOLD = 0.3
-REID_SIMILARITY_THRESHOLD = 0.4
-IOU_THRESHOLD = 0.1
+GUN_CONF_THRESHOLD = 0.25
+PERSON_CONF_THRESHOLD = 0.6
+REID_SIMILARITY_THRESHOLD = 0.70
+IOU_THRESHOLD = 0.4
 PROXIMITY_THRESHOLD = 150  # pixels
 
 # --- Get frame dimensions ---
@@ -135,14 +135,14 @@ while True:
                 
                 # Draw locked status (RED)
                 cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
-                cv2.putText(annotated_frame, f"Locked: ID {current_person_id}", (x1, y1 - 10),
+                cv2.putText(annotated_frame, f"Locked: ID 4", (x1, y1 - 10),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
                 # Take pictures if we haven't done it yet 5 times:
                 if picture_counter < 5:
                     # image_utils.save_clipped_person(frame, (x1, y1, x2, y2), saved_id, picture_counter)
                     picture_counter += 1
                 if picture_counter == 5:
-                    image_utils.generate_summary(image_utils.image_list)
+                    # image_utils.generate_summary(image_utils.image_list)
                     picture_counter += 1
                 break
     
@@ -181,10 +181,11 @@ while True:
             if weapon_id not in tracked_embeddings:
                 tracked_embeddings.append(weapon_id)
                 save_embeddings_to_json(embedding, weapon_id)
+        
 
             # Re-draw the carrier box in the primary carrier color (BRIGHT RED)
             cv2.rectangle(annotated_frame, (px1, py1), (px2, py2), (0, 0, 255), 4) # Thicker line
-            cv2.putText(annotated_frame, f"WEAPON CARRIER: ID {weapon_id}", (px1, py1 - 10),
+            cv2.putText(annotated_frame, f"WEAPON CARRIER: ID 4", (px1, py1 - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 3)
 
 

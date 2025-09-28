@@ -43,7 +43,7 @@ def get_person_id(person_clip):
                 best_match = match_value
                 best_match_id = i
     # if we don't find it we add it
-    if not found_person and best_match < 0.5:
+    if not found_person and best_match < 0.25:
         people_database.append(person_clip)
         return len(people_database) - 1
     else:
