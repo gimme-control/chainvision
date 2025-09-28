@@ -1,7 +1,10 @@
 import os
+import PIL
 
 import cv2
+from PIL import Image
 
+image_list = []
 
 def save_clipped_person(image, bbox, person_id, frame_index):
     save_path = "suspect_images/"
@@ -23,15 +26,11 @@ def save_clipped_person(image, bbox, person_id, frame_index):
     # crop
     cropped = image[y1:y2, x1:x2]
 
-    # make folder if not exists
-    os.makedirs(save_path, exist_ok=True)
+    cropped_rgb = cv2.cvtColor(cropped, cv2.COLOR_BGR2RGB)
+    pil_img = Image.fromarray(cropped_rgb)
 
-    # filename with id + frame
-    filename = os.path.join(save_path, f"person_{person_id}-{frame_index}.jpg")
-    print(f"Saved file at {filename}")
-    cv2.imwrite(filename, cropped)
+    image_list.append((person_id, frame_index, pil_img))
 
-    return filename
 
 def save_clipped_gun(image, bbox, frame_index):
     save_path = "gun_images/"

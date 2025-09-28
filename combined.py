@@ -1,6 +1,8 @@
 import gunmatch
 from ultralytics import YOLO
 import cv2
+
+import image_utils
 import person_recognition
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
@@ -72,6 +74,7 @@ out = cv2.VideoWriter(
     (frame_width, frame_height)    # frame size
 )
 
+picture_counter = 0
 
 # --- Main Loop ---
 while True:
@@ -108,6 +111,10 @@ while True:
                 cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
                 cv2.putText(annotated_frame, f"Weapon Locked: ID {saved_id}", (x1, y1 - 10),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
+                # Take pictures if we haven't done it yet 5 times:
+                if picture_counter < 5:
+                    image_utils.save_clipped_person(frame, (x1, y1, x2, y2), saved_id, picture_counter)
+                    picture_counter += 1
                 break
 
         if not weapon_locked:
