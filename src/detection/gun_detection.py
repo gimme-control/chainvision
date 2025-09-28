@@ -1,57 +1,68 @@
 import cv2
 from ultralytics import YOLO
+    
+# Load class names from file
+# cap = cv2.VideoCapture('doorinout.mp4')
 
-# Load the YOLO model
-model = YOLO("models/best3.pt")
-class_list = model.names  # Get class names from the model
-print("Loaded class names:", class_list)
+class_list = ["guns"]
 
-# Initialize webcam
+# Initialize the YOLO model
+model = YOLO("best3.pt")
+print(model.names)
+
+
 cap = cv2.VideoCapture(0)
-if not cap.isOpened():
-    print("Error: Could not open webcam")
-    exit()
+# frame_width = int(cap.get(3))
+# frame_height = int(cap.get(4))
+# output_video = cv2.VideoWriter('11.avi', cv2.VideoWriter_fourcc(*'XVID'), 30, (frame_width, frame_height))
+enter_area = [(180, 430), (200, 460), (480, 440), (480, 400)]
+exit_area = [(210, 480), (230, 520), (495, 495), (495, 465)]
 
+people_entered = set()
+counter_enter = 0
+count =0
 while True:
     ret, frame = cap.read()
     if not ret:
-        print("Error: Failed to capture frame")
         break
 
-    # Run YOLO detection
-    results = model(frame, conf=0.5)
+    count += 1
+    if count % 3 != 0:
+        continue
+    results = model.track(frame, conf=0.3)
     if results[0].boxes is None:
-        cv2.imshow('Gun Detection', frame)
-        if cv2.waitKey(1) & 0xFF == 27:  # Press 'ESC' to exit
-            break
         continue
 
-    # Process detections
     boxes = results[0].boxes.data
+    if results[0].boxes.id is not None:
+        ids = results[0].boxes.id
+    else:
+        ids = 0
     class_ids = results[0].boxes.cls
 
-    for box, class_id in zip(boxes, class_ids):
+    list_value = []
+    for box, class_ids, class_id in zip(boxes, class_ids, class_ids):
         x1, y1, x2, y2 = map(int, box[:4].tolist())
-        label = class_list[int(class_id)]
+        list_value.append([x1, y1, x2, y2, class_ids])
 
-        # Draw bounding box and label if a gun is detected
-        if label == "guns":
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
-            cv2.putText(
-                frame,
-                "Gun Detected",
-                (x1, y1 - 10),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.5,
-                (0, 255, 0),
-                2
-            )
+    bbox_id = list_value
 
-    # Display the frame
-    cv2.imshow('Gun Detection', frame)
-    if cv2.waitKey(1) & 0xFF == 27:  # Press 'ESC' to exit
+    for bbox in bbox_id:
+        x3, y3, x4, y4, class_ids = bbox
+        
+        cv2.rectangle(frame, (x3, y3), (x4, y4), (0, 0, 255), 2)    
+        text_position = (x3, y3 - 10)
+        if class_list[int(class_id)] == "guns":
+            text = "Weapone detected"
+        else:
+            text = "False detection"
+        cv2.putText(frame, text, text_position, cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+        
+    # Show the frame
+    cv2.imshow('frame', frame)
+    if cv2.waitKey(1) & 0xFF == 27:  # Prclearess 'ESC' to exit
         break
 
-# Release resources
 cap.release()
+# output_video.release()
 cv2.destroyAllWindows()

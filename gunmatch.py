@@ -1,6 +1,5 @@
 # gunmatch.py
 import numpy as np
-import logging
 
 # ---------- geometry helpers ----------
 def _center_xyxy(b):
@@ -35,7 +34,7 @@ def detect_guns(frame, gun_model, conf=0.20, imgsz=640):
     r = gun_model.predict(frame, conf=conf, imgsz=imgsz, verbose=False)[0]
     if r.boxes is None or len(r.boxes) == 0:
         return []
-    return dedup_boxes(r.boxes.xyxy.cpu().numpy().tolist())  # Apply deduplication
+    return r.boxes.xyxy.cpu().numpy().tolist()
 
 def detect_people(frame, person_model, conf=0.20, imgsz=640):
     """
@@ -47,44 +46,36 @@ def detect_people(frame, person_model, conf=0.20, imgsz=640):
         return []
     xyxy = r.boxes.xyxy.cpu().numpy()
     cls  = r.boxes.cls.cpu().numpy().astype(int)
-    return dedup_boxes(xyxy[cls == 0].tolist())  # Apply deduplication
+    return xyxy[cls == 0].tolist()
 
 # ---------- matching ----------
-def match_people_to_guns(person_boxes, gun_boxes, min_iou=0.01):
+def match_people_to_guns(person_boxes, gun_boxes):
     """
     For each gun box, choose the person with:
-      - max IoU if any overlap and IoU > min_iou, else
+      - max IoU if any overlap, else
       - smallest center distance.
     Returns list of person boxes (or None), one per gun (same order as gun_boxes).
     """
     if not gun_boxes:
-        logging.debug("No gun boxes detected.")
         return []
     if not person_boxes:
-        logging.debug("No person boxes detected.")
         return [None] * len(gun_boxes)
 
     p_centers = np.array([_center_xyxy(p) for p in person_boxes])
     matched = []
     for g in gun_boxes:
         ious = np.array([iou_xyxy(g, p) for p in person_boxes])
-        logging.debug(f"Gun Box: {g}, IoUs: {ious}")  # Log IoU values
-
-        if (ious > min_iou).any():
+        if (ious > 0).any():
             j = int(np.argmax(ious))
-            logging.debug(f"Matched by IoU: Person Box {person_boxes[j]} with IoU {ious[j]}")
             matched.append(person_boxes[j])
         else:
             g_center = _center_xyxy(g)
             dists = np.linalg.norm(p_centers - g_center, axis=1)
-            logging.debug(f"Gun Center: {g_center}, Distances: {dists}")  # Log distances
             j = int(np.argmin(dists))
-            logging.debug(f"Matched by Distance: Person Box {person_boxes[j]} with Distance {dists[j]}")
             matched.append(person_boxes[j])
-
-    logging.debug(f"Matched People to Guns: {matched}")
     return matched
 
+#jjjjjj
 def pairs_for_frame(frame, gun_model, person_model, conf_gun=0.20, conf_person=0.20, imgsz=640):
     """
     Convenience wrapper:
