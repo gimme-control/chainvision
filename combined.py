@@ -1,7 +1,6 @@
 import gunmatch
 from ultralytics import YOLO
 import cv2
-
 import image_utils
 import person_recognition
 import numpy as np
@@ -10,6 +9,8 @@ import json
 import os
 import logging
 
+
+picture_counter = 0 
 # --- Models ---
 # Assuming these models are accessible in your environment
 person_model = YOLO("models/yolov8n.pt")
@@ -60,10 +61,10 @@ def save_embeddings_to_json(embedding, weapon_carrier_id):
 
 
 # --- Thresholds ---
-GUN_CONF_THRESHOLD = 0.25
-PERSON_CONF_THRESHOLD = 0.4
-REID_SIMILARITY_THRESHOLD = 0.5
-IOU_THRESHOLD = 0.2
+GUN_CONF_THRESHOLD = 0.30
+PERSON_CONF_THRESHOLD = 0.3
+REID_SIMILARITY_THRESHOLD = 0.4
+IOU_THRESHOLD = 0.1
 PROXIMITY_THRESHOLD = 150  # pixels
 
 # --- Get frame dimensions ---
@@ -138,7 +139,7 @@ while True:
                             cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
                 # Take pictures if we haven't done it yet 5 times:
                 if picture_counter < 5:
-                    image_utils.save_clipped_person(frame, (x1, y1, x2, y2), saved_id, picture_counter)
+                    # image_utils.save_clipped_person(frame, (x1, y1, x2, y2), saved_id, picture_counter)
                     picture_counter += 1
                 break
 

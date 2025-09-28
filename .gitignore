@@ -4,3 +4,4 @@ __pycache__
 .env
 output_annotated.avi
 luigi_demo.mp4
+.env

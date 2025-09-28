@@ -5,6 +5,12 @@ import cv2
 from PIL import Image
 import google.generativeai as genai
 
+from dotenv import load_dotenv
+import os
+
+load_dotenv()  # this loads variables from your .env file into os.environ
+
+
 image_list = []
 
 def save_clipped_person(image, bbox, person_id, frame_index):
