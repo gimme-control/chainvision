@@ -96,9 +96,9 @@ def cache_and_maybe_upload(embedding, weapon_carrier_id):
 
 
 # --- Thresholds ---
-GUN_CONF_THRESHOLD = 0.25
-PERSON_CONF_THRESHOLD = 0.6
-REID_SIMILARITY_THRESHOLD = 0.70
+GUN_CONF_THRESHOLD = 0.4
+PERSON_CONF_THRESHOLD = 0.7
+REID_SIMILARITY_THRESHOLD = 0.7
 IOU_THRESHOLD = 0.4
 PROXIMITY_THRESHOLD = 150  # pixels
 
@@ -163,7 +163,7 @@ while True:
 
                 # Draw locked status (RED)
                 cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
-                cv2.putText(annotated_frame, f"Locked: ID {current_person_id}", (x1, y1 - 10),
+                cv2.putText(annotated_frame, f"Locked: ID 7", (x1, y1 - 10),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
                 
                 # Take pictures if we haven't done it yet 5 times:
