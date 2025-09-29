@@ -1,65 +1,20 @@
-# Gun Person Tracker
+# Inspiration
+When violent crimes occur, every second counts. We wanted to build something that helps law enforcement react faster by using technology that many cities already have, security cameras. Our goal was to transform passive surveillance into an active early-warning and suspect-tracking system.
 
-A single-camera system that detects people with guns and maintains their identity even when they leave and return to the camera view.
+# What it does
+ChainVision instantly recognizes weapons in security footage, locks onto the person holding them, and tracks their movement across multiple cameras. At the same time, it generates a professional, law–enforcement–grade description of the suspect so officers get actionable details within seconds.
 
-## Features
+# How we built it
+We trained a YOLO model to detect guns and knives, then used OpenCV to visualize and track the suspect across camera feeds. For person re-identification, we generated vector embeddings for each individual, stored them in a SQLite database, and used cosine similarity to match and re-identify the same person across different cameras. From the captured snapshots, we called the Gemini API to produce a concise, police-style description based on the Chicago PD’s public instructions for how to describe a suspect. The entire pipeline operates in real time, creating a seamless chain of visual evidence.
 
-- **Gun Detection**: Uses custom YOLO model to detect guns
-- **Person Detection**: Uses YOLOv8 to detect people
-- **Gun-Person Matching**: Associates guns with the people holding them
-- **Person Re-identification**: Maintains person identity using OSNet ReID model
-- **Persistent Tracking**: Remembers people even when they leave camera view
-- **Database Storage**: Saves person embeddings and metadata to disk
+# Challenges we ran into
+Tracking a suspect between different camera feeds was by far the hardest part. OpenCV is built to process frames one at a time, so maintaining a single identity across multiple cameras isn’t native to the library. We dove into academic papers on person re-identification (ReID) and adapted those techniques to our pipeline, experimenting with different models and similarity metrics until we could reliably match the same suspect across separate angles, all while keeping latency low.
 
-## Requirements
+# Accomplishments that we're proud of
+We’re proud that ChainVision produces law-enforcement–actionable intelligence, not just computer-vision output. Our suspect descriptions follow the Chicago Police Department’s official guidelines for what details officers need, ensuring the information is both accurate and valuable. We also successfully integrated person re-identification (ReID) to track suspects across multiple cameras and reliably map each detected weapon to the individual carrying it, which was a key step toward making the system practical for real-world response.
 
-Install the required packages:
+# What we learned
+We deepened our understanding of custom-class training in YOLO, real-time video processing with OpenCV, and prompt engineering for image-based LLMs. We also learned how critical latency and pipeline optimization are when building live safety systems.
 
-```bash
-pip install -r requirements.txt
-```
-
-## Usage
-
-Run the main tracking system:
-
-```bash
-python gun_person_tracker.py
-```
-
-### Controls
-
-- **'q'**: Quit the application
-- **'s'**: Save the person database to disk
-
-## How It Works
-
-1. **Detection**: The system detects both guns and people in each frame
-2. **Matching**: Guns are matched to nearby people using IoU (Intersection over Union)
-3. **ReID**: Each person gets an embedding using OSNet model
-4. **Tracking**: People are tracked across frames using cosine similarity
-5. **Persistence**: Person identities are maintained even when they leave view
-6. **Database**: All person data is saved to `person_database.json`
-
-## Configuration
-
-Edit `config.py` to adjust:
-- Model paths
-- Detection thresholds
-- ReID parameters
-- Camera settings
-
-## File Structure
-
-- `gun_person_tracker.py`: Main tracking system
-- `config.py`: Configuration settings
-- `person_database.json`: Saved person database (created automatically)
-- `requirements.txt`: Python dependencies
-
-## Technical Details
-
-- **Gun Model**: Custom YOLO model trained on gun detection
-- **Person Model**: YOLOv8n for person detection
-- **ReID Model**: OSNet for person re-identification
-- **Similarity**: Cosine similarity with temporal consistency
-- **Database**: JSON-based storage with automatic loading/saving
+# What's next for ChainVision
+From a technology perspective, we would like to broaden our detection and move to vehicle crime, theft, and other criminal activity. From a business perspective, we want to explore partnerships with city agencies and police departments to pilot ChainVision in controlled environments.
