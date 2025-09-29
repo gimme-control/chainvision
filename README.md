@@ -1,9 +1,8 @@
 
 [![Watch the video](https://img.youtube.com/vi/uCjkrYjl-Sw/maxresdefault.jpg)](https://www.youtube.com/watch?v=uCjkrYjl-Sw)
+Click on the image to watch the demo
 
-
-
-This was a project we made in 2 days for vt-hacks!
+__NOTE__: This was a project we made in 2 days for vt-hacks!
 
 ## Inspiration
 When violent crimes occur, every second counts. We wanted to build something that helps law enforcement react faster by using technology that many cities already have, security cameras. Our goal was to transform passive surveillance into an active early-warning and suspect-tracking system.
