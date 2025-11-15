@@ -1,5 +1,5 @@
 
-[![Watch the video](https://img.youtube.com/vi/uCjkrYjl-Sw/maxresdefault.jpg)](https://www.youtube.com/watch?v=uCjkrYjl-Sw)
+[![Watch the video]([https://img.youtube.com/vi/uCjkrYjl-Sw/maxresdefault.jpg)](https://www.youtube.com/watch?v=uCjkrYjl-Sw](https://www.youtube.com/watch?v=ZosWKu5pzYY))
 Click on the image to watch the demo
 
 __NOTE__: This was a project we made in 2 days for vt-hacks!
